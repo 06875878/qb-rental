@@ -23,16 +23,21 @@ AddEventHandler('qb-rental:server:startreturnvehicle', function(ped)
         local returendprice = 0
         local novehreturned = true
         for k,v in pairs(RentedCars[src]) do 
-            local returnvehcoord = GetEntityCoords(v.veh, false)
-            local distance = GetDistanceBetweenCoords(coords, returnvehcoord)
-            if distance <= 20 then
-                ReturnVehicle(src, v.veh, k, v.returnprice)
-                RentedCars[v.owner][v.carspot] = nil
-                VehicleSpots[v.rentid][v.carspot].used = false
-                
-                returned = returned + 1
-                returendprice = returendprice + v.returnprice
-                novehreturned = false
+            -- Convert the NetID back to a Server Entity Handle
+            local currentVeh = NetworkGetEntityFromNetworkId(v.netid)
+            
+            if DoesEntityExist(currentVeh) then
+                local returnvehcoord = GetEntityCoords(currentVeh, false)
+                local distance = GetDistanceBetweenCoords(coords, returnvehcoord)
+                if distance <= 20 then
+                    ReturnVehicle(src, currentVeh, k, v.returnprice)
+                    RentedCars[v.owner][v.carspot] = nil
+                    VehicleSpots[v.rentid][v.carspot].used = false
+                    
+                    returned = returned + 1
+                    returendprice = returendprice + v.returnprice
+                    novehreturned = false
+                end
             end
             Wait(5)
         end
@@ -153,18 +158,24 @@ function SpotLoop()
     while InSpotLoop == true do
         Wait(500)
         local dospotsloop = false
-        for k,v in pairs(RentedCars) do
+        for playerSrc, vehicles in pairs(RentedCars) do
             Wait(100)
-            for k,v in pairs(v) do
+            for k,v in pairs(vehicles) do
                 if VehicleSpots[v.rentid][v.carspot].used == true then
                     Wait(10)
                     dospotsloop = true
-                    dospotsloop = true
                     local spotcord = v.carspawn
-                    local vehcord = GetEntityCoords(v.veh)
-                    if GetDistanceBetweenCoords(spotcord, vehcord) >= 20 then
+                    -- Use NetEvent/Network routing friendly tracking
+                    local currentVeh = NetworkGetEntityFromNetworkId(v.netid)
+                    if DoesEntityExist(currentVeh) then
+                        local vehcord = GetEntityCoords(currentVeh)
+                        if GetDistanceBetweenCoords(spotcord, vehcord) >= 20 then
+                            VehicleSpots[v.rentid][v.carspot].used = false
+                            -- REMOVED table.remove here so it doesn't forget your rental!
+                        end
+                    else
+                        -- If vehicle is far away and un-spawned server-side, just clear the parking spot
                         VehicleSpots[v.rentid][v.carspot].used = false
-                        table.remove(RentedCars[v.owner], k)
                     end
                 end
             end
